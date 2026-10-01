@@ -79,21 +79,28 @@ class DB {
     const connection = await this.getConnection();
     try {
       const params = [];
+      const values = [];
       if (password) {
-        const hashedPassword = await bcrypt.hash(password, 10);
-        params.push(`password='${hashedPassword}'`);
+        params.push('password=?');
+        values.push(await bcrypt.hash(password, 10));
       }
       if (email) {
-        params.push(`email='${email}'`);
+        params.push('email=?');
+        values.push(email);
       }
       if (name) {
-        params.push(`name='${name}'`);
+        params.push('name=?');
+        values.push(name);
       }
       if (params.length > 0) {
-        const query = `UPDATE user SET ${params.join(', ')} WHERE id=${userId}`;
-        await this.query(connection, query);
+        await this.query(connection, `UPDATE user SET ${params.join(', ')} WHERE id=?`, [...values, userId]);
       }
-      return this.getUser(email, password);
+      // Look the user up by id so a partial update (e.g. name only) still finds them.
+      const [updated] = await this.query(connection, `SELECT email FROM user WHERE id=?`, [userId]);
+      if (!updated) {
+        throw new StatusCodeError('unknown user', 404);
+      }
+      return this.getUser(updated.email);
     } finally {
       connection.end();
     }
@@ -206,6 +213,9 @@ class DB {
   async getFranchises(authUser, page = 0, limit = 10, nameFilter = '*') {
     const connection = await this.getConnection();
 
+    // Query string values arrive as strings and are interpolated into LIMIT/OFFSET, so force them to integers.
+    page = Number.parseInt(page) || 0;
+    limit = Number.parseInt(limit) || 10;
     const offset = page * limit;
     nameFilter = nameFilter.replace(/\*/g, '%');
 
@@ -252,6 +262,11 @@ class DB {
   async getFranchise(franchise) {
     const connection = await this.getConnection();
     try {
+      const found = await this.query(connection, `SELECT id FROM franchise WHERE id=?`, [franchise.id]);
+      if (found.length === 0) {
+        return null;
+      }
+
       franchise.admins = await this.query(connection, `SELECT u.id, u.name, u.email FROM userRole AS ur JOIN user AS u ON u.id=ur.userId WHERE ur.objectId=? AND ur.role='franchisee'`, [franchise.id]);
 
       franchise.stores = await this.query(connection, `SELECT s.id, s.name, COALESCE(SUM(oi.price), 0) AS totalRevenue FROM dinerOrder AS do JOIN orderItem AS oi ON do.id=oi.orderId RIGHT JOIN store AS s ON s.id=do.storeId WHERE s.franchiseId=? GROUP BY s.id`, [franchise.id]);
