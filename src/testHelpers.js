@@ -15,8 +15,8 @@ function expectValidJwt(potentialJwt) {
 }
 
 // Registers a fresh diner through the API and returns the user, its password, and its token.
-async function registerUser() {
-  const user = { name: randomName(), email: randomName() + '@test.com', password: 'a' };
+async function registerUser(name = randomName()) {
+  const user = { name, email: randomName() + '@test.com', password: 'a' };
   const res = await request(app).post('/api/auth').send(user);
   expectValidJwt(res.body.token);
   return { ...res.body.user, password: user.password, token: res.body.token };

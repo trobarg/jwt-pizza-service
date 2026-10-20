@@ -72,8 +72,68 @@ test('delete user not implemented', async () => {
   expect(deleteRes.body.message).toBe('not implemented');
 });
 
-test('list users not implemented', async () => {
-  const listRes = await request(app).get('/api/user').set(auth(diner.token));
-  expect(listRes.status).toBe(200);
-  expect(listRes.body).toEqual({ message: 'not implemented', users: [], more: false });
+describe('list users', () => {
+  let admin;
+
+  beforeAll(async () => {
+    admin = await createAdminUser();
+  });
+
+  test('unauthenticated', async () => {
+    const listRes = await request(app).get('/api/user');
+    expect(listRes.status).toBe(401);
+  });
+
+  test('diner is forbidden', async () => {
+    const listRes = await request(app).get('/api/user').set(auth(diner.token));
+    expect(listRes.status).toBe(403);
+  });
+
+  test('admin gets users without passwords', async () => {
+    const listRes = await request(app).get('/api/user').set(auth(admin.token));
+    expect(listRes.status).toBe(200);
+    expect(typeof listRes.body.more).toBe('boolean');
+    expect(listRes.body.users.length).toBeGreaterThan(0);
+    for (const user of listRes.body.users) {
+      expect(Object.keys(user).sort()).toEqual(['email', 'id', 'name', 'roles']);
+    }
+  });
+
+  // The test database keeps users from earlier runs, so these tests only look at
+  // users whose names share a prefix unique to this run.
+  describe('filtering and paging', () => {
+    const prefix = randomName();
+    let users;
+
+    beforeAll(async () => {
+      users = [];
+      for (const suffix of ['a', 'b', 'c']) {
+        users.push(await registerUser(`${prefix}${suffix}`));
+      }
+    });
+
+    const list = (query) => request(app).get(`/api/user?${query}`).set(auth(admin.token));
+    const summary = ({ id, name, email }) => ({ id, name, email, roles: [{ role: 'diner' }] });
+
+    test('name filter with wildcard', async () => {
+      const listRes = await list(`name=${prefix}*`);
+      expect(listRes.status).toBe(200);
+      expect(listRes.body).toEqual({ users: users.map(summary), more: false });
+    });
+
+    test('exact name filter', async () => {
+      const listRes = await list(`name=${prefix}b`);
+      expect(listRes.body).toEqual({ users: [summary(users[1])], more: false });
+    });
+
+    test('first page reports more', async () => {
+      const listRes = await list(`name=${prefix}*&page=0&limit=2`);
+      expect(listRes.body).toEqual({ users: users.slice(0, 2).map(summary), more: true });
+    });
+
+    test('last page reports no more', async () => {
+      const listRes = await list(`name=${prefix}*&page=1&limit=2`);
+      expect(listRes.body).toEqual({ users: users.slice(2).map(summary), more: false });
+    });
+  });
 });
