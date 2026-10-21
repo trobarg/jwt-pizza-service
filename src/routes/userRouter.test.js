@@ -66,10 +66,48 @@ test('admin update unknown user', async () => {
   expect(updateRes.status).toBe(404);
 });
 
-test('delete user not implemented', async () => {
-  const deleteRes = await request(app).delete(`/api/user/${diner.id}`).set(auth(diner.token));
-  expect(deleteRes.status).toBe(200);
-  expect(deleteRes.body.message).toBe('not implemented');
+describe('delete user', () => {
+  let admin;
+
+  beforeAll(async () => {
+    admin = await createAdminUser();
+  });
+
+  test('unauthenticated', async () => {
+    const other = await registerUser();
+    const deleteRes = await request(app).delete(`/api/user/${other.id}`);
+    expect(deleteRes.status).toBe(401);
+  });
+
+  test('diner is forbidden, even for themselves', async () => {
+    const other = await registerUser();
+    expect((await request(app).delete(`/api/user/${other.id}`).set(auth(diner.token))).status).toBe(403);
+    expect((await request(app).delete(`/api/user/${diner.id}`).set(auth(diner.token))).status).toBe(403);
+  });
+
+  test('admin deletes a user', async () => {
+    const victim = await registerUser();
+    const deleteRes = await request(app).delete(`/api/user/${victim.id}`).set(auth(admin.token));
+    expect(deleteRes.status).toBe(200);
+    expect(deleteRes.body).toEqual({ message: 'user deleted' });
+
+    // They can't log in again...
+    const loginRes = await request(app).put('/api/auth').send({ email: victim.email, password: victim.password });
+    expect(loginRes.status).toBe(404);
+
+    // ...their existing session is revoked...
+    const meRes = await request(app).get('/api/user/me').set(auth(victim.token));
+    expect(meRes.status).toBe(401);
+
+    // ...and they no longer appear in the user list.
+    const listRes = await request(app).get(`/api/user?name=${victim.name}`).set(auth(admin.token));
+    expect(listRes.body.users).toEqual([]);
+  });
+
+  test('unknown user', async () => {
+    const deleteRes = await request(app).delete('/api/user/999999999').set(auth(admin.token));
+    expect(deleteRes.status).toBe(404);
+  });
 });
 
 describe('list users', () => {

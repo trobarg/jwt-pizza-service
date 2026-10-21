@@ -133,6 +133,30 @@ class DB {
     }
   }
 
+  // Removes the user, their roles, and their sessions. Their past orders are kept so franchise revenue doesn't change.
+  async deleteUser(userId) {
+    const connection = await this.getConnection();
+    try {
+      const [found] = await this.query(connection, `SELECT id FROM user WHERE id=?`, [userId]);
+      if (!found) {
+        throw new StatusCodeError('unknown user', 404);
+      }
+
+      await connection.beginTransaction();
+      try {
+        await this.query(connection, `DELETE FROM auth WHERE userId=?`, [userId]);
+        await this.query(connection, `DELETE FROM userRole WHERE userId=?`, [userId]);
+        await this.query(connection, `DELETE FROM user WHERE id=?`, [userId]);
+        await connection.commit();
+      } catch {
+        await connection.rollback();
+        throw new StatusCodeError('unable to delete user', 500);
+      }
+    } finally {
+      connection.end();
+    }
+  }
+
   async loginUser(userId, token) {
     token = this.getTokenSignature(token);
     const connection = await this.getConnection();

@@ -30,6 +30,14 @@ userRouter.docs = [
     example: `curl -X GET 'localhost:3000/api/user?page=0&limit=10&name=*' -H 'Authorization: Bearer tttttt'`,
     response: { users: [{ id: 1, name: '常用名字', email: 'a@jwt.com', roles: [{ role: 'admin' }] }], more: true },
   },
+  {
+    method: 'DELETE',
+    path: '/api/user/:userId',
+    requiresAuth: true,
+    description: 'Deletes a user and ends their sessions. Admin only.',
+    example: `curl -X DELETE localhost:3000/api/user/1 -H 'Authorization: Bearer tttttt'`,
+    response: { message: 'user deleted' },
+  },
 ];
 
 // getUser
@@ -64,7 +72,11 @@ userRouter.delete(
   '/:userId',
   authRouter.authenticateToken,
   asyncHandler(async (req, res) => {
-    res.json({ message: 'not implemented' });
+    if (!req.user.isRole(Role.Admin)) {
+      throw new StatusCodeError('unable to delete a user', 403);
+    }
+    await DB.deleteUser(Number(req.params.userId));
+    res.json({ message: 'user deleted' });
   })
 );
 
