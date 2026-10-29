@@ -48,7 +48,7 @@ jobs:
         run: npm run lint
 
       - name: Write config file
-        # Secrets are read from the environment at runtime, so they should never be written to disk or spliced into shell.
+        # Test-only config: secrets are read from the environment at runtime. The deploy job writes the production config.
         run: |
           cat > src/config.js <<'EOF'
           module.exports = {
@@ -99,9 +99,6 @@ jobs:
           cp Dockerfile dist
           cp -r src/* dist
           cp *.json dist
-          sed -i "s/root/${{ secrets.DB_USERNAME }}/g" dist/config.js
-          sed -i "s/tempdbpassword/${{ secrets.DB_PASSWORD }}/g" dist/config.js
-          sed -i "s/127.0.0.1/${{ secrets.DB_HOSTNAME }}/g" dist/config.js
 
       - name: Update distribution artifact
         uses: actions/upload-artifact@v7.0.2
@@ -120,6 +117,35 @@ jobs:
       uses: actions/download-artifact@v8.0.2
       with:
         name: package
+
+    - name: Write production config
+      # Written here rather than in the build job so secrets never land in the downloadable artifact.
+      env:
+        JWT_SECRET: ${{ secrets.JWT_SECRET }}
+        FACTORY_API_KEY: ${{ secrets.FACTORY_API_KEY }}
+        DB_HOSTNAME: ${{ secrets.DB_HOSTNAME }}
+        DB_USERNAME: ${{ secrets.DB_USERNAME }}
+        DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+      run: |
+        cat > config.js <<EOF
+        module.exports = {
+          jwtSecret: '${JWT_SECRET}',
+          db: {
+            connection: {
+              host: '${DB_HOSTNAME}',
+              user: '${DB_USERNAME}',
+              password: '${DB_PASSWORD}',
+              database: 'pizza',
+              connectTimeout: 60000,
+            },
+            listPerPage: 10,
+          },
+          factory: {
+            url: 'https://pizza-factory.cs329.click',
+            apiKey: '${FACTORY_API_KEY}',
+          },
+        };
+        EOF
 
     - name: Create OIDC token to AWS
       uses: aws-actions/configure-aws-credentials@v6.3.0
