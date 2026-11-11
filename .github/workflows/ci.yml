@@ -67,6 +67,9 @@ jobs:
               url: 'https://pizza-factory.cs329.click',
               apiKey: process.env.FACTORY_API_KEY,
             },
+            metrics: {
+              source: 'jwt-pizza-service-test',
+            },
           };
           EOF
 
@@ -126,6 +129,9 @@ jobs:
         DB_HOSTNAME: ${{ secrets.DB_HOSTNAME }}
         DB_USERNAME: ${{ secrets.DB_USERNAME }}
         DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+        METRICS_ENDPOINT_URL: ${{ secrets.METRICS_ENDPOINT_URL }}
+        METRICS_ACCOUNT_ID: ${{ secrets.METRICS_ACCOUNT_ID }}
+        METRICS_API_KEY: ${{ secrets.METRICS_API_KEY }}
       run: |
         cat > config.js <<EOF
         module.exports = {
@@ -143,6 +149,12 @@ jobs:
           factory: {
             url: 'https://pizza-factory.cs329.click',
             apiKey: '${FACTORY_API_KEY}',
+          },
+          metrics: {
+            source: 'jwt-pizza-service',
+            endpointUrl: '${METRICS_ENDPOINT_URL}',
+            accountId: '${METRICS_ACCOUNT_ID}',
+            apiKey: '${METRICS_API_KEY}',
           },
         };
         EOF
